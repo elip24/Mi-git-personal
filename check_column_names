@@ -1,0 +1,41 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StringType, StructField, ArrayType, IntegerType
+from pyspark.sql.functions import col
+
+spark = SparkSession.builder.getOrCreate()
+
+# Schema and data for first DataFrame (not used in this example, but keeping it for reference)
+schema = StructType([
+    StructField('table_name', StringType(), False),
+    StructField('column_name0', ArrayType(StringType()), True)
+])
+data = [("bseg", ["belnr", "number"])]
+df = spark.createDataFrame(data, schema)
+
+# Schema and data for second DataFrame
+schema2 = StructType([
+    StructField('belnr', StringType(), False),
+    StructField('number', IntegerType(), True),
+    StructField('not_show', IntegerType(), True),
+])
+data2 = [("material2", 3,0),
+         ("material1", 2,0)]
+results = spark.createDataFrame(data2, schema2)
+
+""" Function to check if a column exists and return filtered DataFrame
+def is_value(df, column_name: str):
+    for column in column_name:
+        if column in df.columns:
+            return df.select(column_name)
+        return None
+"""
+def bring_values(df,column_name:list):
+    return df.select(column_name)
+
+column_list = df.collect()[0]['column_name0']
+
+# Call the function with correct parameters
+product = bring_values(results, column_list)
+product.show(truncate=False)
+
+
