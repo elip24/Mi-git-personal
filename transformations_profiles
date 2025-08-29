@@ -1,0 +1,62 @@
+import os
+from datetime import datetime, timezone
+
+import polars as pl
+
+def get_id_attribute(df:pl.DataFrame,id_element:str)-> pl.DataFrame:
+    df=df.with_columns(pl.col(f'{id_element}').str.split(by='/').list.last().alias('id'))
+    return df
+
+def make_hash_cols(df:pl.DataFrame,key_cols)-> pl.DataFrame:
+    key_cols=set(key_cols)
+    cols=[c for c in df.columns if c not in key_cols]
+    columns_to_hash=[pl.col(c).cast(pl.Utf8).fill_null("") for c in cols]
+    df=df.with_columns(pl.concat_str(columns_to_hash,separator="||").hash(seed=0).alias("hash_cols").cast(pl.Utf8))
+    return df
+
+def select_certain_cols_from_list(df:pl.DataFrame,key_cols,search_name)-> pl.DataFrame:
+    key_cols = key_cols
+    list_columns = [c for c in df.columns if df[c].dtype == pl.List and c==search_name]
+    df = df.select(key_cols + list_columns)
+    return df
+
+
+ROOT_PATH=os.getcwd()
+path_file=os.path.join(ROOT_PATH,'profiles.json')
+df=pl.read_json(path_file)
+
+def transformation_raw():
+    ROOT_PATH = os.getcwd()
+    path_file = os.path.join(ROOT_PATH, 'profiles.json')
+    df = pl.read_json(path_file)
+    df = df.with_columns(pl.lit(datetime.now(timezone.utc)).cast(pl.Datetime).alias("syncstartdatetime"))
+    return df
+
+def transformation_clean_header():
+    ROOT_PATH = os.getcwd()
+    path_file = os.path.join(ROOT_PATH, 'profiles.json')
+    df = pl.read_json(path_file)
+    df=get_id_attribute(df,'id')
+    df.unique('id')
+    df = df.select(pl.exclude(pl.List))
+    df = make_hash_cols(df, key_cols=['id', 'url'])
+    df = df.with_columns(pl.lit(datetime.now(timezone.utc)).cast(pl.Datetime).alias("syncstartdatetime"))
+    return df
+
+def transformation_clean_line_location(df):
+    df=select_certain_cols_from_list(df,key_cols=['id'],search_name='locations')
+    df=df.explode('locations')
+    df = df.with_columns([
+        pl.col("locations").alias("locations_raw"),
+        pl.col("locations")
+        .str.replace_all(r"[^\w\s]", "")  # remove punctuation
+        .str.strip_chars()
+        .str.to_lowercase()
+        .alias("locations_norm")
+    ])
+
+    print(df)
+    return df
+
+
+transformation_clean_line_location(df)
